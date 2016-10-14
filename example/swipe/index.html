@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+	<title>swipe</title>
+	<style>
+		html,body{
+			margin: 0;
+            padding: 0;
+            border: 0;
+		}
+	</style>
+</head>
+<body>
+<script src="../../asset/to.js"></script>
+<script src="../../alloy_finger.js"></script>
+	<script>
+	;(function(global, AlloyFinger, To){
+		var imgZoom = function(imgObj) {
+			var img_width = imgObj.width,
+			  	img_height = imgObj.height,
+			  	_clientWidth = global.innerWidth,
+				_clientHeight = global.innerHeight,
+			 	rate_width = _clientWidth/img_width,
+			 	rate_height = _clientHeight/img_height,
+			 	rate = rate_width < rate_height ? rate_width : rate_height;
+			if(rate<1) {
+				img_width = img_width * rate
+				img_height = img_height * rate
+			}
+			return {
+				width:img_width,
+				height:img_height
+			}
+		}
+
+		var imgDetecting = function(src, load, err) {
+			var _img = document.createElement('img')
+			_img.src = src
+			_img.onload = function() {
+				load && load(_img)
+			}
+			_img.onerror = function() {
+				err && err(_img)
+			}
+		}
+
+		var ease = function(x) {
+            return Math.sqrt(1 - Math.pow(x - 1, 2));
+        }
+
+		var Swipe = function(el, current, source, loadImg){
+			this.el = el || document.body
+			this.canvas_ID = '_canvas_swipe'
+			this.canvas = null
+			this.img_box = null
+			this.img = null
+			this.current_index = 0
+			this.default_img = current
+			this.source = source || []
+			this.load_img = loadImg || 'http://mat1.gtimg.com/news/2014/zt/mh17/you/images/loading.gif'
+			this.width = 0
+			this.height = 0
+			this.source_length = this.source && this.source.length
+			this.prev_box = null
+			this.next_box = null
+			this.fade_timer = null
+			this.timer = 500
+			this.m = 50
+			this.add_num = 0
+			this.start_num = 0
+			this.position_left = [0, 0, 0]
+			this.DIRECTION = {
+				left: 'Left',
+				right: 'Right'
+			}
+		}
+		Swipe.prototype = {
+			init: function() {
+				var _box, _img, index = 0; 
+				this.getDeviceSize()
+				this.position_left = [-this.width, 0, this.width]
+				this.createCanvas()				
+				this.el.appendChild(this.canvas)
+				for (var i = 0; i < this.source_length; i++) {
+					if(this.default_img){
+						if(this.source[i].img===this.default_img.img){
+							index = i;
+							break;
+						}
+					}
+				};			
+				this.current_index = index
+				this.start_num = this.width/(this.timer/50)
+				this.start()
+			},
+			start: function() {
+				var _index = 0
+				if(this.current_index > 0){
+					_index = this.current_index-1
+				}
+				if(this.current_index === this.source_length-1){
+					_index
+				}
+				for(var i = 0; i < 3; i++) {
+
+					this.render(_index+i,this.source[i].img)
+				}
+			},
+			render: function(index, src) {
+				var box, img, _this = this;
+				box = this.createImgBox(index)
+				img = this.createImg(src)
+				box.appendChild(img)			
+				new AlloyFinger(box, {
+					touchMove: function(evt) {
+						var items = _this.canvas.childNodes
+						if (Math.abs(evt.deltaX) >= Math.abs(evt.deltaY)) {
+		                    evt.preventDefault();
+		                }		
+		                // _this.moveBox(items, evt.direction)     
+		                console.log('touchMove')   
+					},
+					swipe:function(evt){
+						var items = _this.canvas.childNodes
+		                if(evt.direction===_this.DIRECTION.left && !(index===2 && index===_this.source_length-1)){
+		                	_this.current_index++
+		                    _this.fadeIn(items, evt.direction)              
+		                }else if(evt.direction===_this.DIRECTION.right && !(index===0 && index===_this.current_index)){
+		                	_this.current_index--
+		                    _this.fadeIn(items, evt.direction)
+		                }
+		                console.log('swipe')
+		            }
+				})
+				this.canvas.appendChild(box)
+			},
+			changeBox: function(direction) {
+				var items = this.canvas.childNodes
+				if(direction === this.DIRECTION.left){
+					this.canvas.removeChild(items[0])
+
+				}
+			},
+			moveBox: function(items, direction) {
+				if(!items)return;
+				if(direction === this.DIRECTION.left){
+					this.add_num += this.start_num
+				}else{
+					this.add_num -= this.start_num
+				}				
+				if(Math.abs(this.add_num) > this.width){
+					this.add_num = 0
+					return;
+				}
+				for(var i = 0; i < items.length; i++){		                 			
+					items[i].style.left = (this.position_left[i] - this.add_num) + 'px'
+				}		
+			},
+			fadeIn: function(items, direction, callback) {
+				var _this = this
+				if(!items)return;
+				if(direction === this.DIRECTION.left){
+					this.add_num += this.start_num
+				}else{
+					this.add_num -= this.start_num
+				}				
+				if(Math.abs(this.add_num) > this.width){
+					this.add_num = 0
+					callback && callback()
+					return;
+				}
+				for(var i = 0; i < items.length; i++){		                 			
+					items[i].style.left = (this.position_left[i] - this.add_num) + 'px'
+				}	
+				if(this.fade_timer)
+					clearInterval(this.fade_timer)
+				this.fade_timer = setTimeout(function() {
+					_this.fadeIn(items, direction)
+				}, this.m)
+			},
+			createCanvas: function() {
+				var _canvas, _this = this; 
+				this.canvas = document.getElementById(this.canvas_ID)
+				if(!!this.canvas) {
+					this.canvas.innerHTML = ''
+				}else{
+					_canvas = document.createElement('div')
+					_canvas.id = this.canvas_ID					
+					this.el.appendChild(_canvas)
+					this.canvas = _canvas
+				}
+			},
+			createImgBox: function(num) {
+				var box = document.createElement('div'),_this = this;
+				box.id = 'img_box_' + (num || 0)
+				with(box.style) {
+					position = 'absolute'
+					textAlign = 'center'
+					backgroundColor = 'black'
+					width = _this.width+'px'
+					height = _this.height+'px'
+					overflow = 'hidden'
+					left = _this.position_left[num] + 'px'
+					zIndex = 10001
+				}
+				return box;
+			},
+			createImg: function(src){
+				var img = document.createElement('img'), 
+					_this = this,zoomObj,
+					margin_top = 0;
+				img.src = src
+				imgDetecting(img.src, function(_img) {
+					zoomObj = imgZoom({width: _img.width, height: _img.height})
+					img.width = zoomObj.width
+					img.height = zoomObj.height
+					margin_top = _this.height-_img.height
+					if(margin_top > 0){
+						img.style.marginTop = margin_top / 2 + 'px'
+					}					
+				})
+				
+				return img;
+			},
+			getDeviceSize: function() {
+				this.width = global.innerWidth
+				this.height = global.innerHeight
+			}
+		}
+		global.Swipe = Swipe
+	})(window, AlloyFinger, To)
+
+	var _source2 = [{thumbImg:'http://wyxj.cume.cc/node/image/gh_eb6a2e078eba_16621190b238e067/330c6c1e53d64db892930cfa640372cf/small/C8F5BA53BA068487A9797F65F5A5C22D.jpg',img:'http://wyxj.cume.cc/node/image/gh_eb6a2e078eba_16621190b238e067/330c6c1e53d64db892930cfa640372cf/C8F5BA53BA068487A9797F65F5A5C22D.PNG',accessId:'330c6c1e53d64db892930cfa640372cf',deviceId:'gh_eb6a2e078eba_16621190b238e067',realName:'1476172919650.PNG'}
+,{thumbImg:'http://wyxj.cume.cc/node/image/gh_eb6a2e078eba_16621190b238e067/330c6c1e53d64db892930cfa640372cf/small/039D8B5FDFF6E81664216C6C36277E2B.jpg',img:'http://wyxj.cume.cc/node/image/gh_eb6a2e078eba_16621190b238e067/330c6c1e53d64db892930cfa640372cf/039D8B5FDFF6E81664216C6C36277E2B.PNG',accessId:'330c6c1e53d64db892930cfa640372cf',deviceId:'gh_eb6a2e078eba_16621190b238e067',realName:'1476172911899.PNG'}
+,{thumbImg:'http://wyxj.cume.cc/node/image/gh_eb6a2e078eba_16621190b238e067/330c6c1e53d64db892930cfa640372cf/small/C423845C4CF05A02EE72AD736E6AE58A.jpg',img:'http://wyxj.cume.cc/node/image/gh_eb6a2e078eba_16621190b238e067/330c6c1e53d64db892930cfa640372cf/C423845C4CF05A02EE72AD736E6AE58A.PNG',accessId:'330c6c1e53d64db892930cfa640372cf',deviceId:'gh_eb6a2e078eba_16621190b238e067',realName:'1476172908750.PNG'}
+]
+var _current = {thumbImg:'http://wyxj.cume.cc/node/image/gh_eb6a2e078eba_16621190b238e067/330c6c1e53d64db892930cfa640372cf/small/C8F5BA53BA068487A9797F65F5A5C22D.jpg',img:'http://wyxj.cume.cc/node/image/gh_eb6a2e078eba_16621190b238e067/330c6c1e53d64db892930cfa640372cf/C8F5BA53BA068487A9797F65F5A5C22D.PNG',accessId:'330c6c1e53d64db892930cfa640372cf',deviceId:'gh_eb6a2e078eba_16621190b238e067',realName:'1476172919650.PNG'}
+	var swipe = new Swipe(null,_current,_source2)
+	swipe.init()
+	</script>
+</body>
+</html>
